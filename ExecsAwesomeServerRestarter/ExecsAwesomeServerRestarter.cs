@@ -1,77 +1,94 @@
 ﻿using System;
+using System.IO;
 using System.Net;
-using System.Configuration;
 
 using Arma2Net.AddInProxy;
 using BattleNET;
 
-using NLog;
 
 namespace ExecsAwesomeServerRestarter
 {
     [AddIn("ExecsAwesomeServerRestarter")]
-    public class ExecsAwesomeServerRestarter : AddIn
+    public class ExecsAwesomeServerRestarter : MethodAddIn
     {
-        private BattlEyeClient Login()
+        private static Action Callback;
+
+        private static BattlEyeClient Client;
+
+        private void Login(string host, string port, string password)
         {
             var credentials = new BattlEyeLoginCredentials(
-                    Dns.GetHostAddresses(ConfigurationManager.AppSettings["host"])[0],
-                    int.Parse(ConfigurationManager.AppSettings["port"]),
-                    ConfigurationManager.AppSettings["password"]);
+                    Dns.GetHostAddresses(host)[0],
+                    int.Parse(port),
+                    password);
 
-            var b = new BattlEyeClient(credentials);
-            b.BattlEyeMessageReceived += BattlEyeMessageReceived;
-            b.BattlEyeConnected += BattlEyeConnected;
-            b.BattlEyeDisconnected += BattlEyeDisconnected;
-            b.ReconnectOnPacketLoss = true;
-            b.Connect();
+            Client = new BattlEyeClient(credentials);
 
-            return b;
+            Client.BattlEyeMessageReceived += BattlEyeMessageReceived;
+            Client.BattlEyeConnected += BattlEyeConnected;
+            Client.BattlEyeDisconnected += BattlEyeDisconnected;
+            Client.ReconnectOnPacketLoss = true;
+            Client.Connect();
+
         }
 
-        public bool ShutdownServer()
+        public string ShutdownServer(string host, string port, string password)
         {
             try
             {
-                var b = this.Login();
+                Callback = () =>
+                    {
+                        Client.SendCommand("#shutdown");
 
-                b.SendCommand("#shutdown");
+                        Client.Disconnect();
+                    };
 
-                b.Disconnect();
+                this.Login(host, port, password);
 
-                return true;
+                return "true";
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                File.WriteAllText(@"debug.log", e.Message + "\r\n\r\n" + e.StackTrace);
 
-                return false;
+                return "false";
             }
         }
 
-        public bool LockServer()
+        public string LockServer(string host, string port, string password)
         {
             try
             {
-                var b = this.Login();
+                Callback = () =>
+                    {
+                        Client.SendCommand("#lock");
 
-                b.SendCommand("#lock");
+                        Client.Disconnect();
+                    };
 
-                b.Disconnect();
+                this.Login(host, port, password);
 
-                return true;
+                return "true";
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                File.WriteAllText(@"debug.log", e.Message + "\r\n\r\n" + e.StackTrace);
 
-                return false;
+                return "false";
             }
         }
 
         private static void BattlEyeConnected(BattlEyeConnectEventArgs args)
         {
-            Console.WriteLine(args.Message);
+            if (Callback != null)
+            {
+                Callback.Invoke();
+
+                Client.Disconnect();
+
+                Callback = null;
+                Client = null;
+            }
         }
 
         private static void BattlEyeDisconnected(BattlEyeDisconnectEventArgs args)
@@ -82,22 +99,6 @@ namespace ExecsAwesomeServerRestarter
         private static void BattlEyeMessageReceived(BattlEyeMessageEventArgs args)
         {
             Console.WriteLine(args.Message);
-        }
-
-        public override string Invoke(string args, int maxResultSize)
-        {
-            LogManager.GetLogger("*").Debug(string.Format("Invoke called with args: {0}, maxResultSize: {1}", args, maxResultSize));
-            switch (args)
-            {
-                case "ShutdownServer":
-                    return this.ShutdownServer().ToString();
-                    break;
-                case "LockServer":
-                    return this.LockServer().ToString();
-                    break;
-            }
-
-            return string.Empty;
         }
     }
 }
