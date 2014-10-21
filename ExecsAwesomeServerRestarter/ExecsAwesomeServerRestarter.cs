@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Threading;
 
 using Arma2Net.AddInProxy;
 using BattleNET;
@@ -14,6 +15,8 @@ namespace ExecsAwesomeServerRestarter
         private static Action Callback;
 
         private static BattlEyeClient Client;
+
+        private static EventWaitHandle done = new EventWaitHandle(false, EventResetMode.AutoReset);
 
         private void Login(string host, string port, string password)
         {
@@ -45,6 +48,8 @@ namespace ExecsAwesomeServerRestarter
 
                 this.Login(host, port, password);
 
+                done.WaitOne();
+
                 return "true";
             }
             catch (Exception e)
@@ -68,6 +73,8 @@ namespace ExecsAwesomeServerRestarter
 
                 this.Login(host, port, password);
 
+                done.WaitOne();
+
                 return "true";
             }
             catch (Exception e)
@@ -88,6 +95,8 @@ namespace ExecsAwesomeServerRestarter
 
                 Callback = null;
                 Client = null;
+
+                done.Set();
             }
         }
 
